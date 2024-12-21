@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template to create an S3 bucket and EKS.
+
+Resources:
+  # S3 bucket resource 
+  DeploymentArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: deployment-artifacts-bucket-silviyanancy
+      AccessControl: Private
+
+  # IAM Role for EKS Cluster
+  EKSClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com  # Allows EKS to assume this role
+            Action: sts:AssumeRole
+      ManagedPolicyArns:  # Policies for EKS
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+  
+  # EKS Cluster Resource
+  EKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: MyEKSCluster  
+      Version: "1.31"  # Kubernetes version for the control plane
+      RoleArn: !GetAtt EKSClusterRole.Arn  # Reference the ARN of the IAM Role
+      ResourcesVpcConfig:  # Network configuration for the cluster
+        SubnetIds:
+          - subnet-06cbd26a33849a901  # default-vpc subnet
+          - subnet-038276a65f68c98c0
+        SecurityGroupIds:
+          - sg-030d99543f55a6e00  # default vpc sg
+
+  # IAM Role for Node Group
+  NodeGroupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+
+  # Node Group for Worker Nodes
+  NodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Ref EKSCluster
+      NodeRole: !GetAtt NodeGroupRole.Arn
+      Subnets:
+        - subnet-06cbd26a33849a901
+        - subnet-038276a65f68c98c0
+      ScalingConfig:
+        MinSize: 1
+        MaxSize: 3
+        DesiredSize: 2
+      InstanceTypes:
+        - t3.medium  # Instance type for worker nodes
+      AmiType: AL2_x86_64  # Amazon Linux 2 AMI for Kubernetes
